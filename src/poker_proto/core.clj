@@ -26,7 +26,8 @@
 (def suits [:spade :suit :heart :club :diamond])
 (def card-values [:2 :3 :4 :5 :6 :7 :8 :9 :10 :J :Q :K :A])
 
-(def player-state {:players [{:name "name1" :seat-position 1 :hand [] :folded false :bet-size 0} {:name "name2" :seat-position 3 :hand [] :folded false :bet-size 0}]})
+(def player-state {:players [{:name "name1" :seat-position 1 :hand [] :folded false :bet-size 0}
+                             {:name "name2" :seat-position 3 :hand [] :folded false :bet-size 0}]})
 
 (def game-turn-state {:big-blind-position 3
                       :small-blind-position 1
@@ -44,10 +45,10 @@
                 ; in bet-action as :re-raise as well and the action will continue.
                 :pot 200000})
 
-(def table {:player-state player-state
-            :game-turn-state game-turn-state
-            :card-state card-state
-            :bet-state bet-state})
+(def table-state {:player-state player-state
+                  :game-turn-state game-turn-state
+                  :card-state card-state
+                  :bet-state bet-state})
 
 
 ; Keys in the player map will correspond to the player's
@@ -57,6 +58,8 @@
 
 ; To generate a deck:
 (defn build-deck [suits card-values]
+  "Returns a deck of the shape:
+  [[:spade :A] [:heart :Q] [:diamond :10]]"
   (map (fn [suit] (map (fn [card-val] [suit card-val]) card-values)) suits))
 
 ; Flattening a single level of nested vectors:
@@ -109,10 +112,10 @@
       (concat l r)
       (concat r l))))
 
-; Then for merge... you'll want to introduce some random
+; Then for merge-cards... you'll want to introduce some random
 ; generator in here as well for determining whether to prepend
 ; or append l w/ r.
-(defn merge [l-partition r-partition]
+(defn merge-cards [l-partition r-partition]
   (which-concat l-partition r-partition))
 
 ; Future fixes... as I'm calling it quits on this because
@@ -135,8 +138,8 @@
         l-partition (take randomized-split deck-partition)
         r-partition (drop randomized-split deck-partition)]
     (if (<= (count deck-partition) 2)
-      (merge l-partition r-partition)
-      (merge (mix-cards l-partition) (mix-cards r-partition)))))
+      (merge-cards l-partition r-partition)
+      (merge-cards (mix-cards l-partition) (mix-cards r-partition)))))
 
 ; The power of recursion!
 (defn shuffle [deck n]
