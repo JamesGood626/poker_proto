@@ -23,7 +23,7 @@
 ; OR:
 ; [[suit card-value]... repeat 5 times]
 
-(def suits [:spade :suit :heart :club :diamond])
+(def suits [:spade :heart :club :diamond])
 (def card-values [:2 :3 :4 :5 :6 :7 :8 :9 :10 :J :Q :K :A])
 
 (def player-state {:players [{:name "name1" :seat-position 1 :hand [] :folded false :bet-size 0}
@@ -50,7 +50,6 @@
                   :card-state card-state
                   :bet-state bet-state})
 
-
 ; Keys in the player map will correspond to the player's
 ; seat-position, to facilitate retrieval when referenced
 ; from the table map.
@@ -59,15 +58,21 @@
 ; To generate a deck:
 (defn build-deck [suits card-values]
   "Returns a deck of the shape:
-  [[:spade :A] [:heart :Q] [:diamond :10]]"
+  [[:spade :A] [:heart :Q] [:diamond :10]] ...and so on.
+  But the return value is a list of four lists... so it still needs to be flattened.
+  "
   (map (fn [suit] (map (fn [card-val] [suit card-val]) card-values)) suits))
 
-; Flattening a single level of nested vectors:
-; (reduce (fn [x acc] (concat x acc)) () ['(1) '(2) '(3)])
-; result -> (1 2 3)
-
 (defn flatten-deck [deck]
+  "
+  Flattening a single level of nested vectors:
+  (reduce (fn [x acc] (concat x acc)) () ['(1) '(2) '(3)])
+  result -> (1 2 3)
+  "
   (reduce (fn [x acc] (concat x acc)) () deck))
+
+(defn construct-deck [suits card-values]
+  (flatten-deck (build-deck suits card-values)))
 
 ; (flatten-deck (build-deck suits card-values))
 ; yields:
@@ -133,6 +138,10 @@
 ; (take 2 '(1 2 3 4 5)) -> '(1 2)
 ; (drop 2 '(1 2 3 4 5)) -> '(3 4 5)
 (defn mix-cards [deck-partition]
+  "
+  (take 2 '(1 2 3 4)) # => (1 2)
+  (drop 2 '(1 2 3 4)) # => (3 4)
+  "
   (let [mid (get-mid-point deck-partition)
         randomized-split (split-up-or-down mid (gen-rand-int mid))
         l-partition (take randomized-split deck-partition)
@@ -157,20 +166,36 @@
 (defn deal [deck player]
   (let [card (first deck)
         remaining-deck (rest deck)]
-    [remaining-deck (add-card card player)]))
-
+    {:remaining-deck remaining-deck :updated-player (add-card card player)}))
 
 
 (def players [{:name "name1" :seat-position 1 :hand [] :folded false :bet-size 0} {:name "name2" :seat-position 3 :hand [] :folded false :bet-size 0}])
 
+(defn update-player-hand [acc deck player]
+  (let [result (deal (get acc :deck) player)
+       players-updated (assoc acc :players (conj (:players acc) (last result)))]
+  (assoc players-updated :deck (first result))))
+
+(defn deal-hand [deck]
+  (fn [acc player]
+    (update-player-hand acc deck player)))
+
 ; Getting -> Wrong number of args (0) passed to: clojure.lang.PersistentArrayMap
 ; when calling this function.
 (defn deal-initial-hands [deck players n-cards]
-  (let [helper-fn (fn [player acc]
-                    (def result (deal (get acc :deck) player))
-                    (def players-updated (assoc acc :players (conj (:players acc) (last result))))
-                    ((assoc players-updated :deck (first result))))
-        dealt-result (reduce helper-fn {:players [] :deck deck} players)]
+  (let [dealt-result (reduce (deal-hand deck) players)]
     (if (= n-cards 0)
       dealt-result
       (deal-initial-hands (:deck dealt-result) (:players dealt-result) (- n-cards 1)))))
+
+; clojure.core/reduce
+; ([f coll] [f val coll])
+;   f should be a function of 2 arguments. If val is not supplied,
+;   returns the result of applying f to the first 2 items in coll, then
+;   applying f to that result and the 3rd item, etc. If coll contains no
+;   items, f must accept no arguments as well, and reduce returns the
+;   result of calling f with no arguments.  If coll has only 1 item, it
+;   is returned and f is not called.  If val is supplied, returns the
+;   result of applying f to val and the first item in coll, then
+;   applying f to that result and the 2nd item, etc. If coll contains no
+;   items, returns val and f is not called.

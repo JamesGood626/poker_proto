@@ -1,13 +1,14 @@
 (ns poker-proto.core-test
   (:require [clojure.test :refer :all]
             [poker-proto.core :as pp]))
+(use 'clojure.data)
 
-(def proper-deck (
+(def proper-deck '(
   ; suits
   {:key :spade, :count 13} 
   {:key :heart, :count 13}
   {:key :diamond, :count 13}
-  {:key :clubs, :count 13}
+  {:key :club, :count 13}
   ; values
   {:key :A, :count 4}
   {:key :K, :count 4}
@@ -22,7 +23,8 @@
   {:key :4, :count 4}
   {:key :3, :count 4}
   {:key :2, :count 4}
-  ))
+))
+
 ; (def suits [:spade :suit :heart :club :diamond])
 ; (def card-values [:2 :3 :4 :5 :6 :7 :8 :9 :10 :J :Q :K :A])
 
@@ -74,7 +76,7 @@
   (fn [frequencies]
     (map frequencies terms)))
 
-  (def groups (group-by (fn [x] [(get x 0) (get x 1)] partial-deck))
+(defn sub-divided-groups [deck] (group-by (fn [x] [(get x 0) (get x 1)] deck)))
 
 ; Deprecated, only for reference
 (defn count-occurences-dep [terms]
@@ -155,16 +157,106 @@
           get-keys-with-groups
           get-frequencies))
 
-(def check-deck-properties (count-occurences (concat pp/suits pp/card-values)))
+(defn compare-sequences [xs ys]
+  "
+  Where xs is the generated sequence which we compare against a sequence (ys) for
+  which we expect the results to be.
+
+  (.indexOf '({:key 'two'} {:key 'one'}) {:key 'one'})
+  1
+  poker-proto.core=> (.indexOf '({:key 'two'} {:key 'one'}) {:key 'two'})
+  0
+  poker-proto.core=> (.indexOf '({:key 'two'} {:key 'one'}) {:key 'three'})
+  -1
+  "
+  (let [nested-compare (fn [element] (.indexOf xs element))
+        sequences-equivalent (= (.indexOf (map nested-compare ys) -1) -1)]
+  (if sequences-equivalent
+    true
+    false)))
+
+; (def list-one '(
+;      {:key :diamond, :count 13}
+;      {:key :club, :count 13}))
+;  (def list-two '(
+;      {:key :heart, :count 13}
+;      {:key :spade, :count 13}))
+; (not= list-one list-two) # => true
+; (def list-three '(
+;     {:key :diamond, :count 13}
+;     {:key :club, :count 13}))
+; (not= list-one list-three) # => false
+; (not false) # => true
+; (not (not= list-one list-three)) # => true
+; (not (not= list-one list-two)) # => false
+; AHHH... but if the elements are in a different order in the list...
+; then the not= result will be false...
+
 
 (deftest build-deck-test
-  (is (= (pp/build-deck pp/suits pp/card-values) "WHAAT")))
-  ; (is (+ 1 1) (+ 1 2)))
-  ; (is (build-deck suits card-values) [:one]))
+  "
+  Just want to ensure the 4 sublists are of length 13 to ensure they add up to 52
+  if the list is flattened.
+  (filter (fn [x] (= (count x) 12)) '('(1 2) '(3 4))) # => ()
+  (filter (fn [x] (= (count x) 2)) '('(1 2) '(3 4))) # =>((quote (1 2)) (quote (3 4)))
+  "
+  (let [deck (pp/build-deck pp/suits pp/card-values)
+        sub-lists-of-length-thirteen (filter (fn [x] (= (count x) 13)) deck)]
+    (is (= (count deck) 4))
+    (is (= (count sub-lists-of-length-thirteen) 4))))
+
+(deftest construct-deck-test
+  (let [
+    deck (pp/construct-deck pp/suits pp/card-values)
+    built-deck-occurences (count-occurences deck)
+  ]
+  (is (= (count deck) 52))
+  (is (= (compare-sequences built-deck-occurences proper-deck) true))))
+
+(deftest mix-cards-test
+  (let [deck (pp/construct-deck pp/suits pp/card-values)
+        mixed-cards (pp/mix-cards deck)]
+    (is (= (count mixed-cards) 52))))
+
+(deftest shuffle-deck-test
+  (let [deck (pp/construct-deck pp/suits pp/card-values)
+        shuffled-deck (pp/shuffle deck 100)]
+    (is (=  (count shuffled-deck) 52))
+    ; TODO: This should be a function which takes in a shuffled-deck
+    ; and a deck, and computes a delta between the two in order to ensure
+    ; and a given threshold of randomness in the shuffle is maintained.
+    ; (is (= shuffled-deck "WHAT"))
+    ))
+
+; ********
+; THE BUILD UP OF FUNCTIONS FOR DEALING A HAND:
+; ********
+(deftest add-card-test
+(let [player {:name "player1", :seat-position 1, :hand [], :folded false, :bet-size 0}
+      player-after-add-card {:name "player1", :seat-position 1, :hand [{:suit :spade, :card-value 10}], :folded false, :bet-size 0}]
+    (is (= (pp/add-card {:suit :spade :card-value 10 } player) player-after-add-card))))
+
+; TODO:
+; Fix shuffle method.
+; (nth shuffled-deck 0) is an array of all one suit....
+; (deftest deal-test
+;   (let [player {:name "player1", :seat-position 1, :hand [], :folded false, :bet-size 0}
+;         shuffled-deck (pp/shuffle (pp/build-deck pp/suits pp/card-values) 100)]
+;     (is (= (:updated-player (pp/deal shuffled-deck player)) "WHAT"))))
+
+; (deftest dealt-hands-test
+;   (let [shuffled-deck (pp/shuffle (pp/build-deck pp/suits pp/card-values) 100)
+;         dealt-hands (pp/deal-initial-hands shuffled-deck (:players pp/player-state) 2)]
+;     (is (= dealt-hands "WHAT"))))
+
+; Not going to implement this at the moment... But what property of a shuffled-deck would I want to capture... perhaps
+; it's the diff between the built-deck and the distance from which a particular card started and where it moved, and then
+; measure those diffs and aggregate them into a final score... and ensure that the score consistently remains above a certain
+; threshold so we can guarantee a solid consistent level of randomness in the shuffled deck.
 
 ; NOTE:
 ; You can also organize tests into contexts w/ "testing".
 ; (deftest test-basic-inventory (testing "Finding books"
 ;                                 (is (not (nil? (i/find-by-title "Emma" books))))
 ;                                 (is (nil? (i/find-by-title "XYZZY" books)))) (testing "Copies in inventory"
-;                                                                                (is (= 10 (i/number-of-copies-of "Emma" books)))))
+;                                                                                (is (= 10 (i/number-of-copies-of "Emma" books)))))sdf
