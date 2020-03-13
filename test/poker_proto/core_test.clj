@@ -26,7 +26,7 @@
 ))
 
 ; (def suits [:spade :suit :heart :club :diamond])
-; (def card-values [:2 :3 :4 :5 :6 :7 :8 :9 :10 :J :Q :K :A])
+; (def values [:2 :3 :4 :5 :6 :7 :8 :9 :10 :J :Q :K :A])
 
 ; Generally want to capture the properties of a deck...
 ; which should be that for each suit there is a frequency of 13.
@@ -95,7 +95,7 @@
     the below behavior.
     (def partial-deck [[:spade :A] [:heart :10] [:spade :9] [:spade :2]]) 
     1. (def groups (group-by (fn [x] (get x 0)) partial-deck)) # => {:spade [[:spade :A] [:spade :9] [:spade :2]], :heart [[:heart :10]]}
-    # NOTE: This group-by approach clearly fails to get the card-values.... Needed to add more
+    # NOTE: This group-by approach clearly fails to get the values.... Needed to add more
     (def groups (group-by (fn [x] [(get x 0) (get x 1)]) partial-deck)) # => {[:spade :A] [[:spade :A]], [:heart :10] [[:heart :10]], [:spade :9] [[:spade :9]], [:spade :2] [[:spade :2]]}
     (vec groups) # => [[[:spade :A] [[:spade :A]]] [[:heart :10] [[:heart :10]]] [[:spade :9] [[:spade :9]]] [[:spade :2] [[:spade :2]]]]
     (flatten (vec groups)) # => (:spade :A :spade :A :heart :10 :heart :10 :spade :9 :spade :9 :spade :2 :spade :2)
@@ -200,26 +200,30 @@
   (filter (fn [x] (= (count x) 12)) '('(1 2) '(3 4))) # => ()
   (filter (fn [x] (= (count x) 2)) '('(1 2) '(3 4))) # =>((quote (1 2)) (quote (3 4)))
   "
-  (let [deck (pp/build-deck pp/suits pp/card-values)
+  (let [deck (pp/build-deck pp/suits pp/values)
         sub-lists-of-length-thirteen (filter (fn [x] (= (count x) 13)) deck)]
     (is (= (count deck) 4))
+    ; Typically, testing something like this would be considered an implementation detail,
+    ; which is no bueno. However, in this case, since build-deck is a dependency of construct-deck
+    ; and it is expecting the deck to be in this format, keeping this test will help eliminate any confusion
+    ; if the implementation of build-deck changes.
     (is (= (count sub-lists-of-length-thirteen) 4))))
 
 (deftest construct-deck-test
   (let [
-    deck (pp/construct-deck pp/suits pp/card-values)
+    deck (pp/construct-deck pp/suits pp/values)
     built-deck-occurences (count-occurences deck)
   ]
   (is (= (count deck) 52))
   (is (= (compare-sequences built-deck-occurences proper-deck) true))))
 
 (deftest mix-cards-test
-  (let [deck (pp/construct-deck pp/suits pp/card-values)
+  (let [deck (pp/construct-deck pp/suits pp/values)
         mixed-cards (pp/mix-cards deck)]
     (is (= (count mixed-cards) 52))))
 
 (deftest shuffle-deck-test
-  (let [deck (pp/construct-deck pp/suits pp/card-values)
+  (let [deck (pp/construct-deck pp/suits pp/values)
         shuffled-deck (pp/shuffle deck 100)]
     (is (=  (count shuffled-deck) 52))
     ; TODO: This should be a function which takes in a shuffled-deck
@@ -231,23 +235,89 @@
 ; ********
 ; THE BUILD UP OF FUNCTIONS FOR DEALING A HAND:
 ; ********
-(deftest add-card-test
+(deftest add-card-to-hand-test
 (let [player {:name "player1", :seat-position 1, :hand [], :folded false, :bet-size 0}
       player-after-add-card {:name "player1", :seat-position 1, :hand [{:suit :spade, :card-value 10}], :folded false, :bet-size 0}]
-    (is (= (pp/add-card {:suit :spade :card-value 10 } player) player-after-add-card))))
+    (is (= (pp/add-card-to-hand player {:suit :spade :card-value 10 }) player-after-add-card))))
 
-; TODO:
-; Fix shuffle method.
-; (nth shuffled-deck 0) is an array of all one suit....
-; (deftest deal-test
-;   (let [player {:name "player1", :seat-position 1, :hand [], :folded false, :bet-size 0}
-;         shuffled-deck (pp/shuffle (pp/build-deck pp/suits pp/card-values) 100)]
-;     (is (= (:updated-player (pp/deal shuffled-deck player)) "WHAT"))))
 
-; (deftest dealt-hands-test
-;   (let [shuffled-deck (pp/shuffle (pp/build-deck pp/suits pp/card-values) 100)
+(deftest deal-test
+  (let [player {:name "player1", :seat-position 1, :hand [], :folded false, :bet-size 0}
+        shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)
+        dealt-hand-state (pp/deal shuffled-deck player)
+        updated-player-hand (-> dealt-hand-state :updated-player :hand)
+        remaining-deck (:remaining-deck dealt-hand-state)]
+        (is (= (count remaining-deck) 51))
+        (is (= (count updated-player-hand) 1)
+        ; (is (= dealt-hand-state "WHAA"))
+        )))
+
+(deftest update-player-hand-test
+  (let [shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)
+        player-one (get (:players pp/player-state) 0)
+        result (pp/update-player-hand pp/player-state shuffled-deck player-one)
+        remaining-deck-count (count (:remaining-deck result))
+        updated-player-state (:players result)
+        updated-player-hand (-> updated-player-state (nth 0) :hand)
+        ]
+  ; Would be good to ensure the hand has the correct types: i.e. [:heart :10], [:spade, :2]
+  ; (is (= result "WHAA"))
+  (is (= remaining-deck-count 51))
+  (is (= (count updated-player-hand) 1))))
+
+(deftest deal-hand-test
+  (let [shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)
+        deal-single-hand (pp/deal-hand shuffled-deck)
+        result (deal-single-hand pp/player-state (get (:players pp/player-state) 0))
+        remaining-deck-count (count (:remaining-deck result))
+        updated-player-state (:players result)
+        updated-player-hand (-> updated-player-state (nth 0) :hand count)
+        ]
+        ; (is (= updated-player-state "WUHH"))
+        (is (= remaining-deck-count 51))
+        (is (= updated-player-hand 1))))
+
+(deftest adjust-players-position-for-dealing-test
+  (let [
+    game-turn-state {:button-position 3 :player-turn 5}
+    result (pp/adjust-players-position-for-dealing (:players pp/player-state) (pp/button-position game-turn-state))]
+    (is (= result [{:name "name4", :seat-position :4, :hand [], :folded false, :bet-size 0}
+                   {:name "name5", :seat-position :5, :hand [], :folded false, :bet-size 0}
+                   {:name "name6", :seat-position :6, :hand [], :folded false, :bet-size 0}
+                   {:name "name7", :seat-position :7, :hand [], :folded false, :bet-size 0}
+                   {:name "name8", :seat-position :8, :hand [], :folded false, :bet-size 0}
+                   {:name "name9", :seat-position :9, :hand [], :folded false, :bet-size 0}
+                   {:name "name10", :seat-position :10, :hand [], :folded false, :bet-size 0}
+                   {:name "name1", :seat-position :1, :hand [], :folded false, :bet-size 0}
+                   {:name "name2", :seat-position :2, :hand [], :folded false, :bet-size 0}
+                   {:name "name3", :seat-position :3, :hand [], :folded false, :bet-size 0}]))))
+
+(deftest deal-single-round-test
+  (let [
+    shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)
+    game-turn-state {:button-position 3 :player-turn 5}
+    dealt-round-result (pp/deal-single-round shuffled-deck (:players pp/player-state) game-turn-state)
+    remaining-deck-count (count (:remaining-deck dealt-round-result))
+    updated-player-state (:players dealt-round-result)
+    valid-deal? (every? (fn [player] (= (count (:hand player)) 1)) updated-player-state)
+    last-idx (- (count updated-player-state) 1)
+    first-player-seat-pos (:seat-position (nth updated-player-state 0))
+    last-player-seat-pos (:seat-position (nth updated-player-state last-idx))
+  ]
+  (is valid-deal?)
+  (is (= remaining-deck-count 42))
+  (is (= first-player-seat-pos :4))
+  (is (= last-player-seat-pos :3))))
+                               
+; (deftest wtf
+;   (let [shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)]
+;   (is (= (reduce (pp/deal-hand shuffled-deck) {} (:players pp/player-state)) "WTF"))))
+
+; (deftest dealt-initial-hands-test
+;   (let [shuffled-deck (pp/shuffle (pp/construct-deck pp/suits pp/values) 100)
 ;         dealt-hands (pp/deal-initial-hands shuffled-deck (:players pp/player-state) 2)]
 ;     (is (= dealt-hands "WHAT"))))
+
 
 ; Not going to implement this at the moment... But what property of a shuffled-deck would I want to capture... perhaps
 ; it's the diff between the built-deck and the distance from which a particular card started and where it moved, and then
